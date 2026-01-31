@@ -1,16 +1,24 @@
 # Raw data contract
 
-Source: Eurostat API, as it was produced by the source
-Data format: JSON
+**Source**: Eurostat COMEXT dissemination service
 
-This data is inmutable, not allowed to be modified or overwritten
+**Purpose**: Raw landing zone (Bronze). Files are stored exactly as provided by the source.
 
-Schema stability is not guaranteed, it depends on the source's stability
+**Format**: Bulk files (e.g. `.7z`, `.dat`) or source-native format:
+```
+data/raw/comext_products/YYYY-MM/                                                                                 
+    ├── full_YYYYMM.dat                                                                                               
+    └── full_YYYYMM.7z   
+```
 
+**Immutability**:
+- Raw data is immutable
+- Files must not be modified or overwritten
 
+**Schema guarantees**:
+- No schema guarantees are assumed
+- Schema stability depends entirely on the source
 
-
-
-
-
-
+**Notes**:
+- Raw data may be temporary or lifecycle-managed due to size and cost
+- Downstream processing must not rely on raw schema stability
