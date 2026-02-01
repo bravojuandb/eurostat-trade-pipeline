@@ -1,23 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This prints the job name for observability.
+# Helper function to print current step for observability
 log() { echo "[download] $*"; }
 
 DRY_RUN="${DRY_RUN:-0}"
 
+#-------------------- SNAPSHOT IDENTIFICATION
+# Optional snapshot id (used to create an immutable landing directory per run)
+# Example: comext__20260201T064500
+SNAPSHOT_ID="${SNAPSHOT_ID:-}"
+if [[ -z "$SNAPSHOT_ID" ]]; then
+  # Portable timestamp (macOS + Linux)
+  SNAPSHOT_ID="$(date +%Y%m%dT%H%M%S)"
+fi
+
+log "SNAPSHOT_ID=$SNAPSHOT_ID"
 log "DRY_RUN=$DRY_RUN"
 
 # Read command line arguments
 FROM="$1"   # YYYY-MM
 TO="$2"     # YYYY-MM
 
-# Set configuration variables: source and landig zone
+#-------------------- SOURCE CONFIGURATION AND LANDING ZONE
 BASE_URL="https://ec.europa.eu/eurostat/api/dissemination/files"
-OUT_DIR="data/raw/comext_products"
+OUT_DIR="data/raw/comext__${SNAPSHOT_ID}"
 
-# Portable next_month function to advance time safely
-# Solves: Given a month in YYYY-MM format, what is the next month?
+#-------------------- MONTH NAVIGATION
+# Advance a YYYY-MM period by one month in a portable way
 next_month() {
   python - "$1" <<'PY'
 import sys
@@ -32,8 +42,10 @@ PY
 
 current="$FROM"
 
-log "start from=$FROM to=$TO out_dir=$OUT_DIR"
+log "start snapshot=$SNAPSHOT_ID from=$FROM to=$TO out_dir=$OUT_DIR"
 
+#-------------------- INGESTION LOOP (closed interval: FROM → TO)
+# Iterates month by month, downloading immutable raw bulk files
 while [[ "$current" < "$TO" || "$current" == "$TO" ]]; do
   yyyymm="${current/-/}"
 
@@ -49,6 +61,7 @@ while [[ "$current" < "$TO" || "$current" == "$TO" ]]; do
   if [[ -f "$out" ]]; then
     log "exists skip month=$current file=$out"
   else
+    # Prints URLs on dry run mode
     if [[ "$DRY_RUN" == "1" ]]; then
       log "$url"
     else
@@ -63,4 +76,5 @@ while [[ "$current" < "$TO" || "$current" == "$TO" ]]; do
   current="$(next_month "$current")"
 done
 
+#-------------------- RUN COMPLETION
 log "end"

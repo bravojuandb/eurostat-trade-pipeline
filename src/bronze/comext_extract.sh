@@ -1,12 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_DIR="data/raw/comext_products"
-
+# Helper function to print current step for observability
 log() { echo "[extract] $*"; }
 
-log "start base_dir=$BASE_DIR"
+BASE_DIR="data/raw/comext_products"
 
+#-------------------- SNAPSHOT RESOLUTION (select latest snapshot)
+SNAPSHOT_ID="${SNAPSHOT_ID:-}"
+
+if [[ -z "$SNAPSHOT_ID" ]]; then
+  # Default: extract latest snapshot by lexical order
+  BASE_DIR="$(ls -d data/raw/comext__* 2>/dev/null | sort | tail -n 1)"
+else
+  BASE_DIR="data/raw/comext__${SNAPSHOT_ID}"
+fi
+
+if [[ -z "$BASE_DIR" || ! -d "$BASE_DIR" ]]; then
+  echo "[extract] FAIL base_dir not found: $BASE_DIR" >&2
+  exit 2
+fi
+
+log "start snapshot=${SNAPSHOT_ID:-auto-latest} base_dir=$BASE_DIR"
+
+#-------------------- EXTRACTION LOOP
+# Extracts raw bulk archives into working .dat files
 find "$BASE_DIR" -type f -name "full_*.7z" | sort | while read -r archive; do
   dir="$(dirname "$archive")"
   base="$(basename "$archive")"          # full_YYYYMM.7z
@@ -39,4 +57,5 @@ find "$BASE_DIR" -type f -name "full_*.7z" | sort | while read -r archive; do
   log "success dat=$dat"
 done
 
+#-------------------- RUN COMPLETION
 log "end"
