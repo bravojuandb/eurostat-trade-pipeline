@@ -1,8 +1,17 @@
+# Downloads the .7z dataset from COMEXT bulk download 
+# This is intended to run inside a Docker container before comext_extract.sh
+# Dont forget setting DRY_RUN and SNAPSHOT_ID variables in Docker cli
+
 #!/usr/bin/env bash
 set -euo pipefail
 
 # Helper function to print current step for observability
 log() { echo "[download] $*"; }
+
+#-------------------- PREREQUISITES
+# Fail fast with a clear message if required tools are missing (if run ouside Docker).
+command -v curl >/dev/null 2>&1 || { echo "[download] FAIL: curl is required" >&2; exit 2; }
+command -v python >/dev/null 2>&1 || { echo "[download] FAIL: python is required" >&2; exit 2; }
 
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -19,8 +28,36 @@ log "SNAPSHOT_ID=$SNAPSHOT_ID"
 log "DRY_RUN=$DRY_RUN"
 
 # Read command line arguments
-FROM="$1"   # YYYY-MM
-TO="$2"     # YYYY-MM
+FROM="${1:-}"   # YYYY-MM
+TO="${2:-}"     # YYYY-MM
+
+# If one or both variables are missing log the error
+if [[ -z "$FROM" || -z "$TO" ]]; then
+  log "FAIL usage: $0 YYYY-MM YYYY-MM" >&2
+  exit 2
+fi
+
+#-------------------- PERIOD VALIDATION
+MIN_MONTH="2002-01"
+
+if [[ "$FROM" < "$MIN_MONTH" || "$TO" < "$MIN_MONTH" ]]; then
+  echo "[download] FAIL: months before $MIN_MONTH are not supported (FROM=$FROM TO=$TO)" >&2
+  exit 2
+fi
+
+if [[ "$FROM" > "$TO" ]]; then
+  echo "[download] FAIL: FROM must be <= TO (FROM=$FROM TO=$TO)" >&2
+  exit 2
+fi
+
+#-------------------- TEMP FILE CLEANUP 
+# Ensure partial downloads do not remain if the script exits unexpectedly.
+cleanup() {
+  if [[ -n "${tmp:-}" && -f "${tmp:-}" ]]; then
+    rm -f "${tmp:-}"
+  fi
+}
+trap cleanup EXIT
 
 #-------------------- SOURCE CONFIGURATION AND LANDING ZONE
 BASE_URL="https://ec.europa.eu/eurostat/api/dissemination/files"
@@ -56,17 +93,20 @@ while [[ "$current" < "$TO" || "$current" == "$TO" ]]; do
   out="${out_dir}/full_${yyyymm}.7z"
   tmp="${out}.part"
 
-  mkdir -p "$out_dir"
-
   if [[ -f "$out" ]]; then
     log "exists skip month=$current file=$out"
   else
-    # Prints URLs on dry run mode
+    # Prints URLs on dry run mode. 
     if [[ "$DRY_RUN" == "1" ]]; then
-      log "$url"
+      log "[dry mode] would_download month=$current"
+      log "[dry mode] would_write file=$out"
     else
+      mkdir -p "$out_dir"
       log "downloading month=$current url=$url"
-      curl -fL -o "$tmp" "$url"
+      curl --fail --location  --show-error\
+        --retry 3 --retry-delay 2 \
+        --connect-timeout 20 --max-time 600 \
+        -o "$tmp" "$url"
       mv -f "$tmp" "$out"
       log "success month=$current file=$out"
       sleep 1
