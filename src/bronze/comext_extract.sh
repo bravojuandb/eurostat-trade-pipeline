@@ -1,19 +1,27 @@
+# Extracts raw .7z bulk archives into .dat files for a single snapshot.
+# Intended to run after comext_download.sh (same SNAPSHOT_ID or auto-latest).
+
 #!/usr/bin/env bash
 set -euo pipefail
 
 # Helper function to print current step for observability
 log() { echo "[extract] $*"; }
 
-BASE_DIR="data/raw/comext_products"
+#-------------------- PREREQUISITES
+# Fail fast with a clear message if required tools are missing (if run ouside Docker).
+command -v 7z >/dev/null 2>&1 || { echo "[extract] FAIL: 7z is required" >&2; exit 2; }
+command -v find >/dev/null 2>&1 || { echo "[extract] FAIL: find is required" >&2; exit 2; }
 
-#-------------------- SNAPSHOT RESOLUTION (select latest snapshot)
+#-------------------- SNAPSHOT RESOLUTION (select snapshot to extract)
+RAW_ROOT="data/raw"
+SNAPSHOT_PREFIX="comext__"
 SNAPSHOT_ID="${SNAPSHOT_ID:-}"
 
 if [[ -z "$SNAPSHOT_ID" ]]; then
-  # Default: extract latest snapshot by lexical order
-  BASE_DIR="$(ls -d data/raw/comext__* 2>/dev/null | sort | tail -n 1)"
+  # Default: extract latest snapshot by lexical order (timestamped names)
+  BASE_DIR="$(ls -d "${RAW_ROOT}/${SNAPSHOT_PREFIX}"* 2>/dev/null | sort | tail -n 1)"
 else
-  BASE_DIR="data/raw/comext__${SNAPSHOT_ID}"
+  BASE_DIR="${RAW_ROOT}/${SNAPSHOT_PREFIX}${SNAPSHOT_ID}"
 fi
 
 if [[ -z "$BASE_DIR" || ! -d "$BASE_DIR" ]]; then
@@ -25,13 +33,24 @@ log "start snapshot=${SNAPSHOT_ID:-auto-latest} base_dir=$BASE_DIR"
 
 #-------------------- EXTRACTION LOOP
 # Extracts raw bulk archives into working .dat files
-find "$BASE_DIR" -type f -name "full_*.7z" | sort | while read -r archive; do
+while read -r archive; do
+  [[ -z "$archive" ]] && continue
   dir="$(dirname "$archive")"
   base="$(basename "$archive")"          # full_YYYYMM.7z
   yyyymm="${base#full_}"; yyyymm="${yyyymm%.7z}"
 
-  dat="${dir}/full_${yyyymm}.dat"
+  tmp_dir=""
+
   tmp_dir="${dir}/_tmp_extract_${yyyymm}"
+
+  cleanup_tmp() {
+    if [[ -n "${tmp_dir:-}" && -d "${tmp_dir:-}" ]]; then
+      rm -rf "${tmp_dir:-}"
+    fi
+  }
+  trap cleanup_tmp EXIT
+
+  dat="${dir}/full_${yyyymm}.dat"
 
   if [[ -f "$dat" ]]; then
     log "exists skip file=$dat"
@@ -54,8 +73,9 @@ find "$BASE_DIR" -type f -name "full_*.7z" | sort | while read -r archive; do
 
   mv -f "$extracted_dat" "$dat"
   rm -rf "$tmp_dir"
+  trap - EXIT
   log "success dat=$dat"
-done
+done < <(find "$BASE_DIR" -maxdepth 2 -type f -name "full_*.7z" | sort)
 
 #-------------------- RUN COMPLETION
 log "end"
