@@ -25,3 +25,23 @@ jobs:
       - name: Lint with ruff
         run: |
           ruff check .
+
+      - name: Build Docker image
+        run: |
+          docker build -t eurostat-trade-pipeline:ci .
+
+      # Smoke test only: run inside the built image without network downloads.
+      # DRY_RUN ensures no data is fetched; this validates wiring and exits fast.
+      - name: Smoke test in Docker (no downloads)
+        run: |
+          docker run --rm \
+            -e DRY_RUN=1 \
+            eurostat-trade-pipeline:ci \
+            bash -lc 'bash src/bronze/comext_download.sh 2002-11 2002-11 && bash src/bronze/comext_extract.sh || true'
+
+      # Static analysis for bash scripts (common pitfalls, not formatting).
+      - name: ShellCheck (bash scripts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck src/bronze/*.sh
