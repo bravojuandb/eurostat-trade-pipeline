@@ -1,8 +1,8 @@
+#!/usr/bin/env bash
 # Downloads the .7z dataset from COMEXT bulk download 
 # This is intended to run inside a Docker container before comext_extract.sh
 # Dont forget setting DRY_RUN and SNAPSHOT_ID variables in Docker cli
 
-#!/usr/bin/env bash
 set -euo pipefail
 
 # Helper function to print current step for observability

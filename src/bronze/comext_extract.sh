@@ -1,7 +1,7 @@
+#!/usr/bin/env bash
+
 # Extracts raw .7z bulk archives into .dat files for a single snapshot.
 # Intended to run after comext_download.sh (same SNAPSHOT_ID or auto-latest).
-
-#!/usr/bin/env bash
 set -euo pipefail
 
 # Helper function to print current step for observability
@@ -19,7 +19,7 @@ SNAPSHOT_ID="${SNAPSHOT_ID:-}"
 
 if [[ -z "$SNAPSHOT_ID" ]]; then
   # Default: extract latest snapshot by lexical order (timestamped names)
-  BASE_DIR="$(ls -d "${RAW_ROOT}/${SNAPSHOT_PREFIX}"* 2>/dev/null | sort | tail -n 1)"
+  BASE_DIR="$(find -d "${RAW_ROOT}/${SNAPSHOT_PREFIX}"* 2>/dev/null | sort | tail -n 1)"
 else
   BASE_DIR="${RAW_ROOT}/${SNAPSHOT_PREFIX}${SNAPSHOT_ID}"
 fi
