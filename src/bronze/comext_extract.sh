@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-
 # Extracts raw .7z bulk archives into .dat files for a single snapshot.
-# Intended to run after comext_download.sh (same SNAPSHOT_ID or auto-latest).
+# Intended to run after comext_download.sh
+
 set -euo pipefail
 
 # Helper function to print current step for observability
@@ -13,13 +13,16 @@ command -v 7z >/dev/null 2>&1 || { echo "[extract] FAIL: 7z is required" >&2; ex
 command -v find >/dev/null 2>&1 || { echo "[extract] FAIL: find is required" >&2; exit 2; }
 
 #-------------------- SNAPSHOT RESOLUTION (select snapshot to extract)
+# By default, extract targets the latest snapshot. 
+# SNAPSHOT_ID is optional and intended for re-extraction of an existing snapshot.
+
 RAW_ROOT="data/raw"
 SNAPSHOT_PREFIX="comext__"
 SNAPSHOT_ID="${SNAPSHOT_ID:-}"
 
 if [[ -z "$SNAPSHOT_ID" ]]; then
-  # Default: extract latest snapshot by lexical order (timestamped names)
-  BASE_DIR="$(find -d "${RAW_ROOT}/${SNAPSHOT_PREFIX}"* 2>/dev/null | sort | tail -n 1)"
+  # Default: extract the latest snapshot directory by lexical order (timestamped names)
+  BASE_DIR="$(find "$RAW_ROOT" -maxdepth 1 -type d -name "${SNAPSHOT_PREFIX}*" 2>/dev/null | sort | tail -n 1)"
 else
   BASE_DIR="${RAW_ROOT}/${SNAPSHOT_PREFIX}${SNAPSHOT_ID}"
 fi

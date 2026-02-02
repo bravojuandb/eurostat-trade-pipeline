@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Downloads the .7z dataset from COMEXT bulk download 
 # This is intended to run inside a Docker container before comext_extract.sh
-# Dont forget setting DRY_RUN and SNAPSHOT_ID variables in Docker cli
+# Dont forget setting DRY_RUN to just print the download paths.
 
 set -euo pipefail
 
