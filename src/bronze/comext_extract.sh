@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Extracts raw .7z bulk archives into .dat files for a single snapshot.
-# Intended to run after comext_download.sh
+# Extracts full_v2_YYYYMM.7z bulk archives into full_v2_YYYYMM.dat files.
+# Intended to run inside a Docker container after comext_download.sh YYYY-MM YYYY-MM
+# Usage for debugging from repo root:
+#   bash src/bronze/comext_extract.sh
 
 set -euo pipefail
 
@@ -8,55 +10,44 @@ set -euo pipefail
 log() { echo "[extract] $*"; }
 
 #-------------------- PREREQUISITES
-# Fail fast with a clear message if required tools are missing (if run ouside Docker).
+# Fail fast with a clear message if required tools are missing (when running ouside Docker).
 command -v 7z >/dev/null 2>&1 || { echo "[extract] FAIL: 7z is required" >&2; exit 2; }
 command -v find >/dev/null 2>&1 || { echo "[extract] FAIL: find is required" >&2; exit 2; }
 
-#-------------------- SNAPSHOT RESOLUTION (select snapshot to extract)
-# By default, extract targets the latest snapshot. 
-# SNAPSHOT_ID is optional and intended for re-extraction of an existing snapshot.
-
-RAW_ROOT="data/raw"
-SNAPSHOT_PREFIX="comext__"
-SNAPSHOT_ID="${SNAPSHOT_ID:-}"
-
-if [[ -z "$SNAPSHOT_ID" ]]; then
-  # Default: extract the latest snapshot directory by lexical order (timestamped names)
-  BASE_DIR="$(find "$RAW_ROOT" -maxdepth 1 -type d -name "${SNAPSHOT_PREFIX}*" 2>/dev/null | sort | tail -n 1)"
-else
-  BASE_DIR="${RAW_ROOT}/${SNAPSHOT_PREFIX}${SNAPSHOT_ID}"
-fi
+#-------------------- SOURCE CONFIGURATION
+BASE_DIR="data/raw/comext_products"
 
 if [[ -z "$BASE_DIR" || ! -d "$BASE_DIR" ]]; then
   echo "[extract] FAIL base_dir not found: $BASE_DIR" >&2
   exit 2
 fi
 
-log "start snapshot=${SNAPSHOT_ID:-auto-latest} base_dir=$BASE_DIR"
+log "base_dir=$BASE_DIR"
+
+#-------------------- TEMP FILE CLEANUP 
+# Ensure partial downloads do not remain if the script exits unexpectedly.
+tmp_dir=""
+cleanup_tmp() {
+  if [[ -n "${tmp_dir:-}" && -d "${tmp_dir:-}" ]]; then
+    rm -rf "${tmp_dir:-}"
+  fi
+}
+trap cleanup_tmp EXIT
 
 #-------------------- EXTRACTION LOOP
 # Extracts raw bulk archives into working .dat files
 while read -r archive; do
   [[ -z "$archive" ]] && continue
   dir="$(dirname "$archive")"
-  base="$(basename "$archive")"          # full_YYYYMM.7z
-  yyyymm="${base#full_}"; yyyymm="${yyyymm%.7z}"
+  base="$(basename "$archive")"          # full_v2_YYYYMM.7z
+  stem="${base%.7z}"                      # full_v2_YYYYMM
 
-  tmp_dir=""
-
-  tmp_dir="${dir}/_tmp_extract_${yyyymm}"
-
-  cleanup_tmp() {
-    if [[ -n "${tmp_dir:-}" && -d "${tmp_dir:-}" ]]; then
-      rm -rf "${tmp_dir:-}"
-    fi
-  }
-  trap cleanup_tmp EXIT
-
-  dat="${dir}/full_${yyyymm}.dat"
+  tmp_dir="${dir}/_tmp_extract_${stem}"
+  dat="${dir}/${stem}.dat"
 
   if [[ -f "$dat" ]]; then
     log "exists skip file=$dat"
+    tmp_dir=""
     continue
   fi
 
@@ -67,7 +58,7 @@ while read -r archive; do
   # Extract into a temp folder so partial extraction doesn't look “done”
   7z x "$archive" -o"$tmp_dir" >/dev/null
 
-  # Find the extracted .dat (source often names it full_v2_YYYYMM.dat)
+  # Find the extracted .dat (should match the archive stem)
   extracted_dat="$(find "$tmp_dir" -maxdepth 1 -type f -name "*.dat" | head -n 1 || true)"
   if [[ -z "$extracted_dat" ]]; then
     log "FAIL no .dat found after extracting $archive"
@@ -76,9 +67,9 @@ while read -r archive; do
 
   mv -f "$extracted_dat" "$dat"
   rm -rf "$tmp_dir"
-  trap - EXIT
+  tmp_dir=""  # prevent cleanup from touching unrelated paths
   log "success dat=$dat"
-done < <(find "$BASE_DIR" -maxdepth 2 -type f -name "full_*.7z" | sort)
+done < <(find "$BASE_DIR" -maxdepth 2 -type f -name "full_v2_*.7z" | sort)
 
 #-------------------- RUN COMPLETION
 log "end"

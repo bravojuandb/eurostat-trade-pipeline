@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Downloads the .7z dataset from COMEXT bulk download 
-# This is intended to run inside a Docker container before comext_extract.sh
-# Dont forget setting DRY_RUN to just print the download paths.
+# Downloads full_v2_YYYYMM.7z datasets from COMEXT bulk download, according to selected month interval.
+# Intended to run inside a Docker container before comext_extract.sh
+# Usage for debugging from root:
+#   DRY_RUN=1 bash src/bronze/comext_download.sh 2002-11 2002-12
 
 set -euo pipefail
 
@@ -13,31 +14,22 @@ log() { echo "[download] $*"; }
 command -v curl >/dev/null 2>&1 || { echo "[download] FAIL: curl is required" >&2; exit 2; }
 command -v python >/dev/null 2>&1 || { echo "[download] FAIL: python is required" >&2; exit 2; }
 
+# Dry run switch
 DRY_RUN="${DRY_RUN:-0}"
-
-#-------------------- SNAPSHOT IDENTIFICATION
-# Optional snapshot id (used to create an immutable landing directory per run)
-# Example: comext__20260201T064500
-SNAPSHOT_ID="${SNAPSHOT_ID:-}"
-if [[ -z "$SNAPSHOT_ID" ]]; then
-  # Portable timestamp (macOS + Linux)
-  SNAPSHOT_ID="$(date +%Y%m%dT%H%M%S)"
-fi
-
-log "SNAPSHOT_ID=$SNAPSHOT_ID"
 log "DRY_RUN=$DRY_RUN"
 
-# Read command line arguments
+#-------------------- COMMAND LINE INPUT ARGUMENTS
+# Read
 FROM="${1:-}"   # YYYY-MM
 TO="${2:-}"     # YYYY-MM
 
-# If one or both variables are missing log the error
+# LOg the error if one or both arguments is missing
 if [[ -z "$FROM" || -z "$TO" ]]; then
   log "FAIL usage: $0 YYYY-MM YYYY-MM" >&2
   exit 2
 fi
 
-#-------------------- PERIOD VALIDATION
+#-------------------- PERIOD VALIDATION 
 MIN_MONTH="2002-01"
 
 if [[ "$FROM" < "$MIN_MONTH" || "$TO" < "$MIN_MONTH" ]]; then
@@ -50,6 +42,10 @@ if [[ "$FROM" > "$TO" ]]; then
   exit 2
 fi
 
+#-------------------- SOURCE CONFIGURATION AND LANDING ZONE
+BASE_URL="https://ec.europa.eu/eurostat/api/dissemination/files"
+OUT_DIR="data/raw/comext_products"
+
 #-------------------- TEMP FILE CLEANUP 
 # Ensure partial downloads do not remain if the script exits unexpectedly.
 cleanup() {
@@ -58,10 +54,6 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-
-#-------------------- SOURCE CONFIGURATION AND LANDING ZONE
-BASE_URL="https://ec.europa.eu/eurostat/api/dissemination/files"
-OUT_DIR="data/raw/comext__${SNAPSHOT_ID}"
 
 #-------------------- MONTH NAVIGATION
 # Advance a YYYY-MM period by one month in a portable way
@@ -79,34 +71,46 @@ PY
 
 current="$FROM"
 
-log "start snapshot=$SNAPSHOT_ID from=$FROM to=$TO out_dir=$OUT_DIR"
+log "start from=$FROM to=$TO out_dir=$OUT_DIR"
 
 #-------------------- INGESTION LOOP (closed interval: FROM → TO)
 # Iterates month by month, downloading immutable raw bulk files
 while [[ "$current" < "$TO" || "$current" == "$TO" ]]; do
   yyyymm="${current/-/}"
 
+  # Comext file name full_v2_YYYYMM.7z is preserved after download
   url="${BASE_URL}?file=comext%2FCOMEXT_DATA%2FPRODUCTS%2Ffull_v2_${yyyymm}.7z"
 
-  # Deterministic layout requires full_YYYYMM.7z
   out_dir="${OUT_DIR}/${current}"
-  out="${out_dir}/full_${yyyymm}.7z"
+  out="${out_dir}/full_v2_${yyyymm}.7z"
   tmp="${out}.part"
 
+  # Idempotency check
   if [[ -f "$out" ]]; then
     log "exists skip month=$current file=$out"
   else
     # Prints URLs on dry run mode. 
     if [[ "$DRY_RUN" == "1" ]]; then
-      log "[dry mode] would_download month=$current"
-      log "[dry mode] would_write file=$out"
+      log "[dry mode] month=$current"
+      log "[dry mode] file=$out"
+      log "[dry mode] url=$url"
     else
+     # Ensure month-specific landing directory exists
       mkdir -p "$out_dir"
-      log "downloading month=$current url=$url"
-      curl --fail --location  --show-error\
+
+      log "downloading month=$current"
+      log "may take a while..."
+
+      # Download to a temporary file first:
+      # - retries on transient network failures
+      # - timeouts prevent hanging forever
+      # - atomic move ensures partial files are never treated as complete
+      curl --fail --location --show-error\
         --retry 3 --retry-delay 2 \
         --connect-timeout 20 --max-time 600 \
         -o "$tmp" "$url"
+
+      # Atomic rename: only mark file as complete after successful download
       mv -f "$tmp" "$out"
       log "success month=$current file=$out"
       sleep 1
