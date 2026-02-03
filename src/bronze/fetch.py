@@ -1,6 +1,7 @@
 import argparse
 import subprocess
 import sys
+import os
 
 
 def run(cmd: list[str]) -> None:
@@ -29,6 +30,11 @@ def main() -> None:
 
     # 1) download each month from the interval
     run(["bash", "src/bronze/comext_download.sh", args.from_month, args.to_month])
+
+    # DRY_RUN mode: show plan only, skip extraction
+    if os.getenv("DRY_RUN", "0") == "1":
+        print("[fetch] DRY_RUN=1 -> skipping extract")
+        return
 
     # 2) extract every month once download completes
     run(["bash", "src/bronze/comext_extract.sh"])
