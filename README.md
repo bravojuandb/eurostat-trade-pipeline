@@ -1,3 +1,35 @@
+# eurostat-trade-pipeline
+
+Reproducible ETL pipeline that ingests international trade data from the Eurostat **Comext** database, with a concrete analytical focus on **EU imports of passenger cars (HS 8703)**, including imports from China and electric vehicles (EVs).
+
+The project emphasizes reproducibility, explicit data contracts, and clear separation of concerns (bronze / silver / gold).
+
+---
+
+## Contents
+
+- [Pipeline Overview](#pipeline-overview)
+- [Ingestion Layer](#ingestion-layer-bronze)
+- [How to run](#how-to-run)
+
+---
+
+## Pipeline overview
+
+```
+Eurostat Comext bulk files
+→ Bronze: raw, immutable interval of monthly datasets (completed)
+→ Silver: cleaned, typed, analysis-ready datasets (planned)
+→ Gold: PostgreSQL analytical tables (planned)
+```
+
+---
+
+
+## Ingestion layer (Bronze)
+
+The ingestion layer is responsible for **downloading** and **extracting** raw Eurostat Comext bulk trade data into local storage.
+
 ## Architecture & orchestration design
 
 The ingestion system is built as a layered, reproducible pipeline with clear separation of concerns.
@@ -27,10 +59,6 @@ extract.sh
    ↓
 data/raw/comext_products/
 ```
-
-## Ingestion layer (Bronze)
-
-The ingestion layer is responsible for **downloading** and **extracting** raw Eurostat Comext bulk trade data into local storage.
 
 ### What the ingestion layer does
 
@@ -64,11 +92,12 @@ For the full raw data contract and guarantees, see `data/raw/README.md`.
 
 ---
 
-## Running the ingestion layer with Docker
+## How to run
 
 The ingestion layer is designed to run **inside Docker** for portability and reproducibility.
+THere are three options:
 
-### Quick test (default interval)
+1) Quick test (default interval)
 
 Downloads data from **2002‑12 to 2003‑01**:
 
@@ -76,7 +105,7 @@ Downloads data from **2002‑12 to 2003‑01**:
 docker compose run --rm pipeline
 ```
 
-### Dry‑run mode (planning only)
+2) Dry‑run mode (planning only)
 
 ```bash
 DRY_RUN=1 FROM_MONTH=2005-11 TO_MONTH=2025-11 docker compose run --rm pipeline
@@ -85,10 +114,10 @@ DRY_RUN=1 FROM_MONTH=2005-11 TO_MONTH=2025-11 docker compose run --rm pipeline
 Dry‑run mode:
 - prints what **would** be downloaded (month, file path, URL)
 - performs a lightweight availability check (HTTP status)
-- does **not** download or extract any data
+- does **not** download any data
 - does **not** create files or directories
 
-### Normal execution
+3) Normal execution
 
 ```bash
 FROM_MONTH=2013-11 TO_MONTH=2014-01 docker compose run --rm pipeline
