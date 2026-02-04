@@ -208,4 +208,7 @@ __marimo__/
 project_notes.md
 pull-requests.md
 notes/
-comext__*/
+comext_*/
+data/raw/.DS_Store
+data/.DS_Store
+.DS_Store
