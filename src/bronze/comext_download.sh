@@ -101,19 +101,29 @@ while [[ "$current" < "$TO" || "$current" == "$TO" ]]; do
       log "downloading month=$current"
       log "may take a while..."
 
-      # Download to a temporary file first:
-      # - retries on transient network failures
-      # - timeouts prevent hanging forever
-      # - atomic move ensures partial files are never treated as complete
-      curl --fail --location --show-error\
+      # Download and capture HTTP status explicitly (so 404 can be logged cleanly)
+      http_code=$(curl -sS -L \
         --retry 3 --retry-delay 2 \
         --connect-timeout 20 --max-time 600 \
-        -o "$tmp" "$url"
+        -o "$tmp" -w "%{http_code}" "$url" || true)
 
-      # Atomic rename: only mark file as complete after successful download
-      mv -f "$tmp" "$out"
-      log "success month=$current file=$out"
-      sleep 1
+      if [[ "$http_code" == "200" ]]; then
+        # Atomic rename: only mark file as complete after successful download
+        mv -f "$tmp" "$out"
+        log "success month=$current file=$out"
+        sleep 1
+
+      elif [[ "$http_code" == "404" ]]; then
+        rm -f "$tmp"
+        log "NOT AVAILABLE (404) month=$current url=$url"
+        log "Tip: dataset not published yet for this month"
+        exit 22
+
+      else
+        rm -f "$tmp"
+        log "ERROR download failed month=$current http=$http_code url=$url"
+        exit 1
+      fi
     fi
   fi
 
