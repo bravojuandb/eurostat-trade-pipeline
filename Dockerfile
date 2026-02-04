@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-# System dependencies required by your bash workers
+# System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     curl \
@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Python deps
+# Python depencdecies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -20,7 +20,7 @@ COPY data ./data
 COPY README.md .
 COPY LICENSE .
 
-# Ensure bash scripts are executable (defensive)
+# Ensure bash scripts are executable
 RUN chmod +x src/bronze/*.sh
 
 # Default: show help (safe)
