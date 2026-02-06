@@ -4,10 +4,23 @@
 
 **Purpose**: Raw landing zone (Bronze). Files are stored exactly as provided by the source.
 
+**Content overview**
+
+Each monthly dataset contains aggregated international trade records from Eurostat COMEXT, keyed by:
+
+- REPORTER country and PARTNER country  
+- multiple PRODUCT classifications (NC, SITC, CPA, BEC, section)  
+- trade FLOW and statistical procedure  
+- time PERIOD (monthly)
+
+Measures include trade value (EUR and national currency) and quantities (kg and supplementary units).
+
+Each row represents trade for a specific product between a reporter–partner pair within a single month.
+
 **Format**: Bulk files (e.g. `.7z`, `.dat`) or source-native format:
 ```
 data/raw/
-    comext__snapshot_id(YYYYMMDDTHHMMSS)/
+    comext_products/
         YYYY-MM/
             ├── full_YYYYMM.dat
             └── full_YYYYMM.7z

@@ -1,5 +1,5 @@
 services:
-  pipeline:
+  ingestion:
     build: .
     image: eurostat-ingestion
     working_dir: /app
@@ -7,4 +7,6 @@ services:
       - ./data:/app/data   # Persist outputs locally
     environment:
       DRY_RUN: "${DRY_RUN:-0}"
-    command: python -m src.bronze.fetch --from ${FROM_MONTH:-2002-12} --to ${TO_MONTH:-2003-01}
+    command: ["python", "-m", "src.bronze.fetch",
+          "--from", "${FROM_MONTH:-2002-12}",
+          "--to", "${TO_MONTH:-2003-01}"]
