@@ -14,9 +14,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code + scripts
+# Copy source code + scripts (data is mounted at runtime via Docker Compose)
 COPY src ./src
-COPY data ./data
 COPY README.md .
 COPY LICENSE .
 
