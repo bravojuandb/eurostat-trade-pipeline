@@ -82,7 +82,7 @@ DRY_RUN=1 FROM_MONTH=2005-11 TO_MONTH=2025-11 docker compose run --rm ingestion
 ```
 
 - prints what **would** be downloaded (month, file path, URL)
-- performs a lightweight availability check (HTTP status)
+- does **not** perform any availability check (HTTP status)
 - does **not** download any data
 - does **not** create files or directories
 
@@ -94,7 +94,7 @@ FROM_MONTH=2013-11 TO_MONTH=2014-01 docker compose run --rm ingestion
 
 ### Raw data folder structure
 
-Interval: **FROM_MONTH=**2005-11 **TO_MONTH=**2006-01
+Example: **FROM_MONTH**=2005-11 **TO_MONTH**=2006-01
 ```
 data/raw/
   comext_products/
@@ -118,7 +118,7 @@ For the full raw data contract and guarantees, see [data/raw/README.md](data/raw
 - Periods earlier than **2002-01** are rejected  
 - `FROM_MONTH` must be less than or equal to `TO_MONTH`  
 
-⚠️ **Important:**
+⚠️ **Important:**  
 A new COMEXT dataset is published monthly, with the latest available month typically being two months prior to the current month.  
 If `TO_MONTH` is set for non-published months then:
 - DRY_RUN=1 prints month, file path, and URL even if artificial
