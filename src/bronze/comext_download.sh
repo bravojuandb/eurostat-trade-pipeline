@@ -102,10 +102,11 @@ while [[ "$current" < "$TO" || "$current" == "$TO" ]]; do
       log "may take a while..."
 
       # Download and capture HTTP status explicitly (so 404 can be logged cleanly)
-      http_code=$(curl -sS -L \
+      http_code=$(curl -S -L --progress-bar\
         --retry 3 --retry-delay 2 \
         --connect-timeout 20 --max-time 600 \
         -o "$tmp" -w "%{http_code}" "$url" || true)
+      echo ""
 
       if [[ "$http_code" == "200" ]]; then
         # Atomic rename: only mark file as complete after successful download
