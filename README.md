@@ -61,12 +61,12 @@ The ingestion system is built as a layered, reproducible pipeline with clear sep
 
 ## How to run
 
+The ingestion layer is executed as a batch job inside a **Docker container using Docker Compose**. No local Python environment is required.
+
 ### 1) Clone the repository
 ```bash
 git clone https://github.com/bravojuandb/eurostat-trade-pipeline
 ```
-The ingestion layer is designed to run **inside Docker** for portability and reproducibility.
-
 ### 2) Quick test, dry-run off (default interval)
 
 No FROM/TO are provided and the pipeline defaults to 2002-12 → 2003-01 for quick smoke testing:
