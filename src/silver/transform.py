@@ -35,20 +35,17 @@ def cast_to_parquet(input: Path, start: int, end: int, output: Path):
     """
     Select the desired columns, cast them to proper dtypes, and write a single parquet
     """
-
-    rel = duckdb.read_csv(input)
-
     duckdb.sql(f"""
         COPY(
-        SELECT 
+        SELECT
             REPORTER AS reporter,
             PARTNER AS partner,
             PRODUCT_NC AS product_nc,
             CAST(FLOW AS INTEGER) AS flow,
             CAST(STRPTIME(CAST(PERIOD AS VARCHAR), '%Y%m') AS DATE) AS date,
             VALUE_EUR AS value_eur,
-            QUANTITY_KG AS quantity 
-        FROM rel
+            QUANTITY_KG AS quantity
+        FROM read_csv('{input}')
         WHERE PERIOD >= {start} AND PERIOD <= {end})
         TO '{output}' (FORMAT PARQUET)
     """)
@@ -62,8 +59,8 @@ def main() -> None:
     args = p.parse_args()
 
     BASE_PATH = Path(__file__).parent.parent.parent / "data"
-    FILE_PATH =  BASE_PATH /  "raw" / "comext_products" / "*" / "*.dat"
-    OUT_PATH =  BASE_PATH / "silver" / "fact_trade_clean.parquet"
+    FILE_PATH = BASE_PATH / "raw" / "comext_products" / "*" / "*.dat"
+    OUT_PATH = BASE_PATH / "silver" / "fact_trade_clean.parquet"
 
     start = int(args.from_date.replace("-", ""))
     end = int(args.to_date.replace("-", ""))
