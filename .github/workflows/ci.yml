@@ -1,7 +1,6 @@
-name: CI for Ingestion
+name: CI for Ingestion and Transformation
 
 on:
-  push:
   pull_request:
   workflow_dispatch:
 
@@ -35,7 +34,7 @@ jobs:
 
       # Smoke test only: run inside the built image without network downloads.
       # DRY_RUN ensures no data is fetched; this validates wiring and exits fast.
-      - name: Smoke test in Docker (no downloads)
+      - name: Smoke test ingestion (no downloads)
         run: |
           docker run --rm \
             -e DRY_RUN=1 \
@@ -48,3 +47,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y shellcheck
           shellcheck src/bronze/*.sh
+
+      - name: Smoke test transform CLI
+        run: |
+          docker run --rm \
+            eurostat-trade-pipeline:ci \
+            python -m src.silver.transform --help
