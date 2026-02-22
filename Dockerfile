@@ -21,6 +21,3 @@ COPY LICENSE .
 
 # Ensure bash scripts are executable
 RUN chmod +x src/bronze/*.sh
-
-# Default: show help (safe)
-CMD ["python", "-m", "src.bronze.fetch", "--help"]
