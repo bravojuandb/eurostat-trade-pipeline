@@ -212,3 +212,4 @@ comext_*/
 data/raw/.DS_Store
 data/.DS_Store
 .DS_Store
+data/silver/fact_trade_clean.parquet
