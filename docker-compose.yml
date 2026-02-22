@@ -1,12 +1,37 @@
+x-base: &base
+  build: .
+  image: eurostat-pipeline:latest
+  pull_policy: never
+  working_dir: /app
+  volumes:
+    - ./data:/app/data
+
+
 services:
   ingestion:
-    build: .
-    image: eurostat-ingestion
-    working_dir: /app
-    volumes:
-      - ./data:/app/data   # Persist outputs locally
+    <<: *base
     environment:
       DRY_RUN: "${DRY_RUN:-0}"
     command: ["python", "-m", "src.bronze.fetch",
-          "--from", "${FROM_MONTH:-2002-12}",
-          "--to", "${TO_MONTH:-2003-01}"]
+              "--from", "${FROM_MONTH:-2002-12}",
+              "--to", "${TO_MONTH:-2003-01}"]
+
+  transform:
+    <<: *base
+    depends_on:
+      ingestion:
+        condition: service_completed_successfully
+    command: ["python", "-m", "src.silver.transform",
+              "--from", "${FROM_MONTH:-2002-12}",
+              "--to", "${TO_MONTH:-2003-01}"]
+
+  pipeline:
+    <<: *base
+    environment:
+      DRY_RUN: "${DRY_RUN:-0}"
+    command:
+      - bash
+      - -c
+      - |
+          python -m src.bronze.fetch --from "${FROM_MONTH:-2002-12}" --to "${TO_MONTH:-2003-01}" &&
+          python -m src.silver.transform --from "${FROM_MONTH:-2002-12}" --to "${TO_MONTH:-2003-01}"
