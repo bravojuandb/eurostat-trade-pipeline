@@ -34,4 +34,8 @@ services:
       - -c
       - |
           python -m src.bronze.fetch --from "${FROM_MONTH:-2002-12}" --to "${TO_MONTH:-2003-01}" &&
-          python -m src.silver.transform --from "${FROM_MONTH:-2002-12}" --to "${TO_MONTH:-2003-01}"
+          if [ "${DRY_RUN:-0}" = "1" ]; then
+            echo "[trasform] DRY_RUN=1: -> skipping transform"
+          else
+            python -m src.silver.transform --from "${FROM_MONTH:-2002-12}" --to "${TO_MONTH:-2003-01}"
+          fi
