@@ -10,6 +10,7 @@ The project emphasizes reproducibility, explicit data contracts, and clear separ
 
 - [Pipeline Overview](#pipeline-overview)
 - [Ingestion Layer - Bronze](#ingestion-layer-bronze)
+- [Transformation Layer - Silver](#transformation-layer-silver)
 - [How to Run](#how-to-run)
 - [Continuous Integration](#continuous-integration)
 - [Pipeline Status](#pipeline-status)
@@ -57,59 +58,68 @@ The ingestion system is built as a layered, reproducible pipeline with clear sep
 - Supports **DRY_RUN mode** to validate behavior without downloading data.
 - Is **idempotent**: already‑downloaded months are skipped.
 
+## Transformation Layer (Silver)
+
+The silver layer converts extracted COMEXT `.dat` files into a single cleaned Parquet dataset using DuckDB.
+
+- **CLI entrypoint:** `src/silver/transform.py`  
+  Transforms a selected inclusive interval.
+
+### What the transformation layer does
+- Reads raw files from `data/raw/comext_products/*/*.dat`
+- Selects 7 columns from the source dataset:
+  - `reporter`, `partner`, `product_nc`, `flow`, `date`, `value_eur`, `quantity_kg`
+- Casts fields to analysis-friendly types (including `FLOW -> INTEGER` and `PERIOD -> DATE`)
+- Filters rows by the requested month range
+- Writes one output file: `data/silver/fact_trade_clean.parquet`
+
+
 ---
 
-## How to run
+## How to run the pipeline
 
-The ingestion layer is executed as a batch job inside a **Docker container using Docker Compose**. No local Python environment is required.
+The each layer is executed as a batch job inside a **Docker container using Docker Compose**. No local Python environment is required.
 
 ### 1) Clone the repository
 ```bash
 git clone https://github.com/bravojuandb/eurostat-trade-pipeline
 ```
-### 2) Quick test, dry-run off (default interval)
+### 2) Quick test, (default interval)
 
 No FROM/TO are provided and the pipeline defaults to 2002-12 → 2003-01 for quick smoke testing:
 
 ```bash
-docker compose run --rm ingestion
+docker compose run --rm pipeline
 ```
 
-### 3) Dry‑run on (prints paths, skips downloads)
+### 3) Normal execution (select an interval, dry-run off by default)
 
 ```bash
-DRY_RUN=1 FROM_MONTH=2005-11 TO_MONTH=2025-11 docker compose run --rm ingestion
+FROM_MONTH=2013-11 TO_MONTH=2014-01 docker compose run --rm pipeline
 ```
 
-- prints what **would** be downloaded (month, file path, URL)
-- does **not** perform any availability check (HTTP status)
-- does **not** download any data
-- does **not** create files or directories
-
-### 4) Normal execution (select an interval, dry-run off by default)
-
-```bash
-FROM_MONTH=2013-11 TO_MONTH=2014-01 docker compose run --rm ingestion
-```
-
-### Raw data folder structure
+### data folder structure
 
 Example: **FROM_MONTH**=2005-11 **TO_MONTH**=2006-01
 ```
-data/raw/
-  comext_products/
-    2005-11/
-      full_v2_200511.7z
-      full_v2_200511.dat
-    2005-12/
-      full_v2_200512.7z
-      full_v2_200512.dat
-    2006-01/
-      full_v2_200601.7z
-      full_v2_200601.dat
+data/
+  raw/
+    comext_products/
+      2005-11/
+        full_v2_200511.7z
+        full_v2_200511.dat
+      2005-12/
+        full_v2_200512.7z
+        full_v2_200512.dat
+      2006-01/
+        full_v2_200601.7z
+        full_v2_200601.dat
+  silver/
+    fact_trade_clean.parquet
 ```
 
-For the full raw data contract and guarantees, see [data/raw/README.md](data/raw/README.md)
+Raw data contract: see [data/raw/README.md](data/raw/README.md)
+Silver data contract: see [data/silver/README.md](data/silver/README.md)
 
 ### Validation rules
 
@@ -121,7 +131,7 @@ For the full raw data contract and guarantees, see [data/raw/README.md](data/raw
 ⚠️ **Important:**  
 A new COMEXT dataset is published monthly, with the latest available month typically being two months prior to the current month.  
 If `TO_MONTH` is set for non-published months then:
-- DRY_RUN=1 prints month, file path, and URL even if artificial
+- DRY_RUN=1 prints month, file path, and URL. Skips downstream processing
 - DRY_RUN=0 prints a message: "dataset not published yet for this month".
 
 ---
@@ -142,5 +152,5 @@ The workflow can also be triggered manually via **GitHub Actions → Run workflo
 ## Pipeline Status
 
 - ✅ **Ingestion layer (bronze) - implemented**
-- ⏭️ Transformation layer (silver) — planned
+- ✅ **Transformation layer (silver) — implemented**
 - ⏭️ Loading into PostgreSQL (gold) — planned
