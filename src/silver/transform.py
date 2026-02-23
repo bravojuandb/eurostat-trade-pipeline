@@ -44,7 +44,7 @@ def cast_to_parquet(input: Path, start: int, end: int, output: Path):
             CAST(FLOW AS INTEGER) AS flow,
             CAST(STRPTIME(CAST(PERIOD AS VARCHAR), '%Y%m') AS DATE) AS date,
             VALUE_EUR AS value_eur,
-            QUANTITY_KG AS quantity
+            QUANTITY_KG AS quantity_kg
         FROM read_csv('{input}')
         WHERE PERIOD >= {start} AND PERIOD <= {end})
         TO '{output}' (FORMAT PARQUET)
