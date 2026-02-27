@@ -26,6 +26,7 @@ from pathlib import Path
 import argparse
 import logging
 
+from src.utils.cli_dates import parse_yyyy_mm, validate_range
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -54,20 +55,25 @@ def cast_to_parquet(input: Path, start: int, end: int, output: Path):
 def main() -> None:
 
     p = argparse.ArgumentParser()
-    p.add_argument("--from", dest="from_date", required=True, help="YYYY-MM")
-    p.add_argument("--to", dest="to_date", required=True, help="YYYY-MM")
+    p.add_argument("--from", dest="from_date", required=True, type=parse_yyyy_mm,  help="YYYY-MM")
+    p.add_argument("--to", dest="to_date", required=True, type=parse_yyyy_mm, help="YYYY-MM")
     args = p.parse_args()
 
     BASE_PATH = Path(__file__).parent.parent.parent / "data"
     FILE_PATH = BASE_PATH / "raw" / "comext_products" / "*" / "*.dat"
     OUT_PATH = BASE_PATH / "silver" / "fact_trade_clean.parquet"
 
-    start = int(args.from_date.replace("-", ""))
-    end = int(args.to_date.replace("-", ""))
+    start = args.from_date
+    end = args.to_date
+
+    try:
+        validate_range(start, end)
+    except ValueError as e:
+        p.error(str(e))
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Starting transform: %s to %s", args.from_date, args.to_date)
+    logger.info("Starting transform: %s to %s", start, end)
     logger.info("Writing to %s", OUT_PATH)
 
     logger.info("processing...")
