@@ -3,6 +3,7 @@ import subprocess
 import sys
 import os
 
+from src.utils.cli_dates import parse_yyyy_mm, validate_range
 
 def run(cmd: list[str]) -> None:
     """
@@ -22,9 +23,27 @@ def main() -> None:
     Set parameters --from --to, and calls download and extract bash scripts.
     """
     p = argparse.ArgumentParser()
-    p.add_argument("--from", dest="from_month", required=True, help="YYYY-MM")
-    p.add_argument("--to", dest="to_month", required=True, help="YYYY-MM")
+    p.add_argument(
+        "--from", 
+        dest="from_month", 
+        required=True, 
+        type=parse_yyyy_mm, 
+        help="YYYY-MM"
+    )
+    p.add_argument(
+        "--to", 
+        dest="to_month", 
+        required=True, 
+        type=parse_yyyy_mm, 
+        help="YYYY-MM"
+    )
     args = p.parse_args()
+
+    try:
+        validate_range(args.from_month, args.to_month)
+    except Exception as e:
+        p.error(str(e))
+
 
     print(f"[fetch] start from={args.from_month} to={args.to_month}")
 
