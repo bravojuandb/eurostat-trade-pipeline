@@ -31,8 +31,30 @@ from src.utils.cli_dates import parse_yyyy_mm, validate_range
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
+def find_input_dat_files(raw_root: Path) -> list[Path]:
+    files = list(raw_root.glob("*/*.dat"))
+    if not files:
+        raise FileNotFoundError(
+            f"No input .dat files found under {raw_root}. "
+            "Run ingestion first or check --from/--to range."
+        )
+    return files
 
-def cast_to_parquet(input: Path, start: int, end: int, output: Path):
+
+def ensure_rows_in_range(input_glob: Path, start: int, end: int) -> None:
+    row_count = duckdb.sql(f"""
+        SELECT COUNT(*)
+        FROM read_csv('{input_glob}')
+        WHERE PERIOD >= {start} AND PERIOD <= {end}
+    """).fetchone()[0]
+    if row_count == 0:
+        raise FileNotFoundError(
+            f"No rows found for range {start} to {end}. "
+            "Check ingestion coverage for the selected interval."
+        )
+
+
+def cast_to_parquet(input_glob: Path, start: int, end: int, output: Path):
     """
     Select the desired columns, cast them to proper dtypes, and write a single parquet
     """
@@ -46,7 +68,7 @@ def cast_to_parquet(input: Path, start: int, end: int, output: Path):
             CAST(STRPTIME(CAST(PERIOD AS VARCHAR), '%Y%m') AS DATE) AS date,
             VALUE_EUR AS value_eur,
             QUANTITY_KG AS quantity_kg
-        FROM read_csv('{input}')
+        FROM read_csv('{input_glob}')
         WHERE PERIOD >= {start} AND PERIOD <= {end})
         TO '{output}' (FORMAT PARQUET)
     """)
@@ -60,7 +82,8 @@ def main() -> None:
     args = p.parse_args()
 
     BASE_PATH = Path(__file__).parent.parent.parent / "data"
-    FILE_PATH = BASE_PATH / "raw" / "comext_products" / "*" / "*.dat"
+    RAW_ROOT = BASE_PATH / "raw" / "comext_products"
+    FILE_PATH = RAW_ROOT / "*" / "*.dat"
     OUT_PATH = BASE_PATH / "silver" / "fact_trade_clean.parquet"
 
     start = args.from_date
@@ -71,16 +94,23 @@ def main() -> None:
     except ValueError as e:
         p.error(str(e))
 
-    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        files = find_input_dat_files(RAW_ROOT)
+        logger.info("Found %s .dat files in raw input", len(files))
 
-    logger.info("Starting transform: %s to %s", start, end)
-    logger.info("Writing to %s", OUT_PATH)
+        ensure_rows_in_range(FILE_PATH, start, end)
 
-    logger.info("processing...")
-    cast_to_parquet(FILE_PATH, start, end, OUT_PATH)
+        OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("Starting transform: %s to %s", start, end)
+        logger.info("Writing to %s", OUT_PATH)
+        logger.info("processing...")
+        cast_to_parquet(FILE_PATH, start, end, OUT_PATH)
 
-    row_count = duckdb.sql(f"SELECT COUNT(*) FROM '{OUT_PATH}'").fetchone()[0]
-    logger.info("Rows written: %s", f"{row_count:,}")
+        row_count = duckdb.sql(f"SELECT COUNT(*) FROM '{OUT_PATH}'").fetchone()[0]
+        logger.info("Rows written: %s", f"{row_count:,}")
+    except (FileNotFoundError, duckdb.Error) as e:
+        logger.error("%s", e)
+        raise SystemExit(1)
 
 if __name__ == "__main__":
     main()
