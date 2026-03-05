@@ -15,9 +15,6 @@ How to run:
 python -m src.silver.transform --from YYYY-MM --to YYYY-MM
 
     - It assumes the selected interval is already inside data/raw
-    - It doesn't fail elegantly if the selected interval doesn't exist
-    - If a .dat file doesn't exist, it doesn't fail elegantly
-    - It assumes all the files have the same column disposition (source is reliable)
     - Re-runs are idempotent by design (COPY overwrites the output file)
 """
 
@@ -31,6 +28,11 @@ from src.utils.cli_dates import parse_yyyy_mm, validate_range
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
+REQUIRED_COLUMNS = {
+    "REPORTER", "PARTNER", "PRODUCT_NC", "FLOW", "PERIOD", "VALUE_EUR", "QUANTITY_KG"
+}
+
+
 def find_input_dat_files(raw_root: Path) -> list[Path]:
     files = list(raw_root.glob("*/*.dat"))
     if not files:
@@ -41,16 +43,31 @@ def find_input_dat_files(raw_root: Path) -> list[Path]:
     return files
 
 
+def validate_period_parsing(input_glob: Path, start: int, end: int) -> None:
+    """Fail if any PERIOD values in the requested range cannot be parsed as YYYYMM dates."""
+    bad = duckdb.sql(f"""
+        SELECT COUNT(*)
+        FROM read_csv('{input_glob}')
+        WHERE PERIOD >= {start} AND PERIOD <= {end}
+          AND TRY_STRPTIME(CAST(PERIOD AS VARCHAR), '%Y%m') IS NULL
+    """).fetchone()[0]
+    if bad > 0:
+        raise ValueError(
+            f"{bad} rows have PERIOD values that cannot be parsed as YYYYMM in range {start}–{end}."
+        )
+
+
 def ensure_rows_in_range(input_glob: Path, start: int, end: int) -> None:
+    """Validate the input glob as a whole: fail if it yields zero rows within the requested PERIOD range."""
     row_count = duckdb.sql(f"""
         SELECT COUNT(*)
         FROM read_csv('{input_glob}')
         WHERE PERIOD >= {start} AND PERIOD <= {end}
     """).fetchone()[0]
     if row_count == 0:
-        raise FileNotFoundError(
-            f"No rows found for range {start} to {end}. "
-            "Check ingestion coverage for the selected interval."
+        raise ValueError(
+            f"No rows found for PERIOD range {start}–{end}. "
+            "Action: re-run ingestion for this interval (or verify the raw months exist)."
         )
 
 
@@ -94,22 +111,27 @@ def main() -> None:
     except ValueError as e:
         p.error(str(e))
 
+    logger.info("Run start")
+    logger.info("Input range: %s to %s", start, end)
+    logger.info("Input pattern: %s", FILE_PATH)
+    logger.info("Output path: %s", OUT_PATH)
+
     try:
         files = find_input_dat_files(RAW_ROOT)
         logger.info("Found %s .dat files in raw input", len(files))
 
         ensure_rows_in_range(FILE_PATH, start, end)
+        validate_period_parsing(FILE_PATH, start, end)
 
         OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        logger.info("Starting transform: %s to %s", start, end)
         logger.info("Writing to %s", OUT_PATH)
-        logger.info("processing...")
         cast_to_parquet(FILE_PATH, start, end, OUT_PATH)
 
         row_count = duckdb.sql(f"SELECT COUNT(*) FROM '{OUT_PATH}'").fetchone()[0]
         logger.info("Rows written: %s", f"{row_count:,}")
-    except (FileNotFoundError, duckdb.Error) as e:
-        logger.error("%s", e)
+        logger.info("Run end — OK")
+    except (FileNotFoundError, ValueError, duckdb.Error) as e:
+        logger.error("Run failed: %s", e)
         raise SystemExit(1)
 
 if __name__ == "__main__":
