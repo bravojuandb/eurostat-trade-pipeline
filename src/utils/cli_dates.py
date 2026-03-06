@@ -6,10 +6,10 @@ import argparse
 from datetime import datetime
 
 
-def parse_yyyy_mm(value: str) -> int:
+def parse_yyyy_mm(value: str) -> str:
     try:
         dt = datetime.strptime(value, "%Y-%m")
-        return dt.year * 100 + dt.month  # e.g. 2024-03 -> 202403
+        return dt.strftime("%Y-%m")
     except ValueError:
         raise argparse.ArgumentTypeError(
             f"Invalid date '{value}'. Expected format YYYY-MM (example: 2024-03)."
