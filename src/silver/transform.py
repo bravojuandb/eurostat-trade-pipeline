@@ -80,7 +80,7 @@ def cast_to_parquet(file_pattern: Path, start: int, end: int, output: Path):
             PARTNER AS partner,
             PRODUCT_NC AS product_nc,
             CAST(FLOW AS INTEGER) AS flow,
-            CAST(STRPTIME(CAST(PERIOD AS VARCHAR), '%Y%m') AS PERIOD) AS period,
+            CAST(STRPTIME(CAST(PERIOD AS VARCHAR), '%Y%m') AS DATE) AS period,
             VALUE_EUR AS value_eur,
             QUANTITY_KG AS quantity_kg
         FROM read_csv('{file_pattern}')
