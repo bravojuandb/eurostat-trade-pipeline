@@ -27,9 +27,21 @@ from src.utils.cli_dates import parse_yyyy_mm, validate_range
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
+EXPECTED_COLUMNS = {"REPORTER", "PARTNER", "PRODUCT_NC", "FLOW", "PERIOD", "VALUE_EUR", "QUANTITY_KG"}
 
-def count_input_dat_files(raw_root: Path, start: str, end: str) -> int:
-    """Check existence of .dat files inside raw_root. Return the count of .dat files"""
+def validate_input_schema(files: list[Path]) -> None:
+    for f in files:
+        actual = set(duckdb.sql(f"SELECT * FROM read_csv('{f}') LIMIT 0").columns)
+        missing = EXPECTED_COLUMNS - actual
+        if missing:
+            raise ValueError(
+                f"{f.name} is missing expected columns: {sorted(missing)}. "
+                "Eurostat may have changed the COMEXT schema."
+            )
+
+
+def count_input_dat_files(raw_root: Path, start: str, end: str) -> list[Path]:
+    """Check existence of .dat files inside raw_root. Return list of .dat files"""
     files = [
         path
         for path in raw_root.glob("*/*.dat")
@@ -40,7 +52,7 @@ def count_input_dat_files(raw_root: Path, start: str, end: str) -> int:
             f"No input .dat files found for requested interval {start} to {end} under {raw_root}. "
             "Run ingestion first or verify the raw month folders exist."
         )
-    return len(files)
+    return files
 
 def validate_period_parsing(file_pattern: Path, start: int, end: int) -> None:
     """Fail if any PERIOD values in the requested range cannot be parsed as YYYYMM dates."""
@@ -115,9 +127,10 @@ def main() -> None:
     logger.info("Output path: %s", OUT_PATH)
 
     try:
-        num_of_files = count_input_dat_files(RAW_ROOT, start, end)
-        logger.info("Found %s .dat files in raw input", num_of_files)
+        files = count_input_dat_files(RAW_ROOT, start, end)
+        logger.info("Found %s .dat files in raw input", len(files))
 
+        validate_input_schema(files)
 
         # CLI date values must be converted to valid PERIOD values
         start_num = int(start.replace("-", ""))
