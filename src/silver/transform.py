@@ -81,24 +81,26 @@ def ensure_rows_in_range(file_pattern: Path, start: int, end: int) -> None:
         )
 
 
-def cast_to_parquet(file_pattern: Path, start: int, end: int, output: Path):
+def cast_to_parquet(file_pattern: Path, start: int, end: int, output: Path) -> int:
     """
-    Select the desired columns, cast them to proper dtypes, and write a single parquet
+    Select the desired columns, cast them to proper dtypes, and write a single parquet. 
+    Return the count of written rows
     """
-    duckdb.sql(f"""
-        COPY(
-        SELECT
-            REPORTER AS reporter,
-            PARTNER AS partner,
-            PRODUCT_NC AS product_nc,
-            CAST(FLOW AS INTEGER) AS flow,
-            CAST(STRPTIME(CAST(PERIOD AS VARCHAR), '%Y%m') AS DATE) AS period,
-            VALUE_EUR AS value_eur,
-            QUANTITY_KG AS quantity_kg
-        FROM read_csv('{file_pattern}')
-        WHERE PERIOD >= {start} AND PERIOD <= {end})
-        TO '{output}' (FORMAT PARQUET)
-    """)
+    result =  duckdb.sql(f"""
+                COPY(
+                SELECT
+                    REPORTER AS reporter,
+                    PARTNER AS partner,
+                    PRODUCT_NC AS product_nc,
+                    CAST(FLOW AS INTEGER) AS flow,
+                    CAST(STRPTIME(CAST(PERIOD AS VARCHAR), '%Y%m') AS DATE) AS period,
+                    VALUE_EUR AS value_eur,
+                    QUANTITY_KG AS quantity_kg
+                FROM read_csv('{file_pattern}')
+                WHERE PERIOD >= {start} AND PERIOD <= {end})
+                TO '{output}' (FORMAT PARQUET)
+            """)
+    return result.fetchone()[0]
 
 
 def main() -> None:
@@ -131,6 +133,7 @@ def main() -> None:
         logger.info("Found %s .dat files in raw input", len(files))
 
         validate_input_schema(files)
+        logger.info("Schema validated for %s files", len(files))
 
         # CLI date values must be converted to valid PERIOD values
         start_num = int(start.replace("-", ""))
@@ -141,10 +144,16 @@ def main() -> None:
 
         OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
         logger.info("Writing to %s", OUT_PATH)
-        cast_to_parquet(FILE_PATTERN, start_num, end_num, OUT_PATH)
+        rows_written = cast_to_parquet(FILE_PATTERN, start_num, end_num, OUT_PATH)
 
-        row_count = duckdb.sql(f"SELECT COUNT(*) FROM '{OUT_PATH}'").fetchone()[0]
-        logger.info("Rows written: %s", f"{row_count:,}")
+        # Read back to confirm the output is readable and get the final row count
+        rows_in_file = duckdb.sql(f"SELECT COUNT(*) FROM '{OUT_PATH}'").fetchone()[0]
+        if rows_written != rows_in_file:
+            raise ValueError(
+                f"Post-write mismatch: COPY wrote {rows_written:,} rows "
+                f"but Parquet contains {rows_in_file:,}."
+            )
+        logger.info("Rows written: %s", f"{rows_written:,}")
         logger.info("Run end — OK")
     except (FileNotFoundError, ValueError, duckdb.Error) as e:
         logger.error("Run failed: %s", e)
