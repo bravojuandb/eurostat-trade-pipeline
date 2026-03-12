@@ -81,26 +81,46 @@ def ensure_rows_in_range(file_pattern: Path, start: int, end: int) -> None:
         )
 
 
-def cast_to_parquet(file_pattern: Path, start: int, end: int, output: Path) -> int:
-    """
-    Select the desired columns, cast them to proper dtypes, and write a single parquet. 
-    Return the count of written rows
-    """
-    result =  duckdb.sql(f"""
-                COPY(
-                SELECT
-                    REPORTER AS reporter,
-                    PARTNER AS partner,
-                    PRODUCT_NC AS product_nc,
-                    CAST(FLOW AS INTEGER) AS flow,
-                    CAST(STRPTIME(CAST(PERIOD AS VARCHAR), '%Y%m') AS DATE) AS period,
-                    VALUE_EUR AS value_eur,
-                    QUANTITY_KG AS quantity_kg
-                FROM read_csv('{file_pattern}')
-                WHERE PERIOD >= {start} AND PERIOD <= {end})
-                TO '{output}' (FORMAT PARQUET)
-            """)
-    return result.fetchone()[0]
+def cast_to_parquet(file_pattern: Path, start: int, end: int, output: Path) -> None:
+    """Select the desired columns, cast them to proper dtypes, and write a single parquet."""
+    duckdb.sql(f"""
+        COPY(
+        SELECT
+            REPORTER AS reporter,
+            PARTNER AS partner,
+            PRODUCT_NC AS product_nc,
+            CAST(FLOW AS INTEGER) AS flow,
+            CAST(STRPTIME(CAST(PERIOD AS VARCHAR), '%Y%m') AS DATE) AS period,
+            VALUE_EUR AS value_eur,
+            QUANTITY_KG AS quantity_kg
+        FROM read_csv('{file_pattern}')
+        WHERE PERIOD >= {start} AND PERIOD <= {end})
+        TO '{output}' (FORMAT PARQUET)
+    """)
+
+
+def validate_output_quality(output_file: Path) -> None:
+    """Warn on nulls in measures; fail on invalid flow, negative measures, or bad period dates."""
+    null_value_eur, null_quantity_kg, bad_flow, bad_measures, bad_period = duckdb.sql(f"""
+        SELECT
+            COUNT(*) FILTER (WHERE value_eur IS NULL)                AS null_value_eur,
+            COUNT(*) FILTER (WHERE quantity_kg IS NULL)              AS null_quantity_kg,
+            COUNT(*) FILTER (WHERE flow NOT IN (1, 2))               AS bad_flow,
+            COUNT(*) FILTER (WHERE value_eur < 0 OR quantity_kg < 0) AS bad_measures,
+            COUNT(*) FILTER (WHERE DAY(period) != 1)                 AS bad_period
+        FROM '{output_file}'
+    """).fetchone()
+
+    if null_value_eur > 0:
+        logger.warning("value_eur has %s null rows", f"{null_value_eur:,}")
+    if null_quantity_kg > 0:
+        logger.warning("quantity_kg has %s null rows", f"{null_quantity_kg:,}")
+    if bad_flow > 0:
+        raise ValueError(f"{bad_flow:,} rows have flow values outside {{1, 2}}.")
+    if bad_measures > 0:
+        raise ValueError(f"{bad_measures:,} rows have negative value_eur or quantity_kg.")
+    if bad_period > 0:
+        raise ValueError(f"{bad_period:,} rows have period not on the first day of the month.")
 
 
 def main() -> None:
@@ -142,18 +162,26 @@ def main() -> None:
         validate_period_parsing(FILE_PATTERN, start_num, end_num)
         ensure_rows_in_range(FILE_PATTERN, start_num, end_num)
 
+        source_rows = duckdb.sql(f"""
+            SELECT COUNT(*) FROM read_csv('{FILE_PATTERN}')
+            WHERE PERIOD >= {start_num} AND PERIOD <= {end_num}
+        """).fetchone()[0]
+
         OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
         logger.info("Writing to %s", OUT_PATH)
-        rows_written = cast_to_parquet(FILE_PATTERN, start_num, end_num, OUT_PATH)
+        cast_to_parquet(FILE_PATTERN, start_num, end_num, OUT_PATH)
 
-        # Read back to confirm the output is readable and get the final row count
+        # Read back to confirm the output is readable and row count matches source
         rows_in_file = duckdb.sql(f"SELECT COUNT(*) FROM '{OUT_PATH}'").fetchone()[0]
-        if rows_written != rows_in_file:
+        if source_rows != rows_in_file:
             raise ValueError(
-                f"Post-write mismatch: COPY wrote {rows_written:,} rows "
+                f"Post-write mismatch: source had {source_rows:,} rows "
                 f"but Parquet contains {rows_in_file:,}."
             )
-        logger.info("Rows written: %s", f"{rows_written:,}")
+        logger.info("Rows written: %s", f"{rows_in_file:,}")
+
+        validate_output_quality(OUT_PATH)
+        logger.info("Output quality checks passed")
         logger.info("Run end — OK")
     except (FileNotFoundError, ValueError, duckdb.Error) as e:
         logger.error("Run failed: %s", e)
