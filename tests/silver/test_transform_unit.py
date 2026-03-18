@@ -13,6 +13,9 @@ def create_dat_file(folder: Path, month: str):
     )
 
 def test_count_input_dat_files(tmp_path):
+    """
+    Assert that matching .dat files are counted within the requested month range.
+    """
 
     months = ["2004-01", "2004-02", "2004-03", "2004-05", "2004-06"]
 
@@ -25,6 +28,9 @@ def test_count_input_dat_files(tmp_path):
 
 
 def test_count_input_dat_files_raises_when_no_files_match_range(tmp_path):
+    """
+    Assert that FileNotFoundError is raised when no .dat files match the requested range.
+    """
 
     create_dat_file(tmp_path, "2004-05")
     
