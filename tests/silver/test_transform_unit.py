@@ -23,3 +23,10 @@ def test_count_input_dat_files(tmp_path):
 
     assert  len(files) == len(months)
 
+
+def test_count_input_dat_files_raises_when_no_files_match_range(tmp_path):
+
+    create_dat_file(tmp_path, "2004-05")
+    
+    with pytest.raises(FileNotFoundError):
+        count_input_dat_files(tmp_path, "2004-01", "2004-03")
