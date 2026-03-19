@@ -28,10 +28,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 EXPECTED_COLUMNS = {"REPORTER", "PARTNER", "PRODUCT_NC", "FLOW", "PERIOD", "VALUE_EUR", "QUANTITY_KG"}
+CSV_READ_OPTS = "delim=',', header=True"
 
 def validate_input_schema(files: list[Path]) -> None:
     for f in files:
-        actual = set(duckdb.sql(f"SELECT * FROM read_csv('{f}') LIMIT 0").columns)
+        actual = set(duckdb.sql(f"SELECT * FROM read_csv('{f}', {CSV_READ_OPTS}) LIMIT 0").columns)
         missing = EXPECTED_COLUMNS - actual
         if missing:
             raise ValueError(
@@ -58,7 +59,7 @@ def validate_period_parsing(file_pattern: Path, start: int, end: int) -> None:
     """Fail if any PERIOD values in the requested range cannot be parsed as YYYYMM dates."""
     bad = duckdb.sql(f"""
         SELECT COUNT(*)
-        FROM read_csv('{file_pattern}')
+        FROM read_csv('{file_pattern}', {CSV_READ_OPTS})
         WHERE PERIOD >= {start} AND PERIOD <= {end}
           AND TRY_STRPTIME(CAST(PERIOD AS VARCHAR), '%Y%m') IS NULL
     """).fetchone()[0]
@@ -71,7 +72,7 @@ def ensure_rows_in_range(file_pattern: Path, start: int, end: int) -> None:
     """Validate the file pattern as a whole: fail if it yields zero rows within the requested PERIOD range."""
     row_count = duckdb.sql(f"""
         SELECT COUNT(*)
-        FROM read_csv('{file_pattern}')
+        FROM read_csv('{file_pattern}', {CSV_READ_OPTS})
         WHERE PERIOD >= {start} AND PERIOD <= {end}
     """).fetchone()[0]
     if row_count == 0:
@@ -93,7 +94,7 @@ def cast_to_parquet(file_pattern: Path, start: int, end: int, output: Path) -> N
             CAST(STRPTIME(CAST(PERIOD AS VARCHAR), '%Y%m') AS DATE) AS period,
             VALUE_EUR AS value_eur,
             QUANTITY_KG AS quantity_kg
-        FROM read_csv('{file_pattern}')
+        FROM read_csv('{file_pattern}', {CSV_READ_OPTS})
         WHERE PERIOD >= {start} AND PERIOD <= {end})
         TO '{output}' (FORMAT PARQUET)
     """)
@@ -163,7 +164,7 @@ def main() -> None:
         ensure_rows_in_range(FILE_PATTERN, start_num, end_num)
 
         source_rows = duckdb.sql(f"""
-            SELECT COUNT(*) FROM read_csv('{FILE_PATTERN}')
+            SELECT COUNT(*) FROM read_csv('{FILE_PATTERN}', {CSV_READ_OPTS})
             WHERE PERIOD >= {start_num} AND PERIOD <= {end_num}
         """).fetchone()[0]
 
