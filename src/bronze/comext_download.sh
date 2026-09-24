@@ -101,14 +101,16 @@ while [[ "$current" < "$TO" || "$current" == "$TO" ]]; do
       log "downloading month=$current"
       log "may take a while..."
 
+      curl_exit=0
+
       # Download and capture HTTP status explicitly (so 404 can be logged cleanly)
       http_code=$(curl -S -L --progress-bar\
         --retry 3 --retry-delay 2 \
         --connect-timeout 20 --max-time 600 \
-        -o "$tmp" -w "%{http_code}" "$url" || true)
+        -o "$tmp" -w "%{http_code}" "$url")|| curl_exit=$?
       echo ""
 
-      if [[ "$http_code" == "200" ]]; then
+      if [[ "$http_code" == "200" && "$curl_exit" -eq 0 ]]; then
         # Atomic rename: only mark file as complete after successful download
         mv -f "$tmp" "$out"
         log "success month=$current file=$out"
@@ -122,7 +124,7 @@ while [[ "$current" < "$TO" || "$current" == "$TO" ]]; do
 
       else
         rm -f "$tmp"
-        log "ERROR download failed month=$current http=$http_code url=$url"
+        log "ERROR download failed month=$current http=$http_code url=$url curl_exit=$curl_exit"
         exit 1
       fi
     fi
