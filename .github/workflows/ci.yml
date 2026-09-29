@@ -45,7 +45,7 @@ jobs:
           docker run --rm \
             -e DRY_RUN=1 \
             eurostat-trade-pipeline:ci \
-            bash -lc 'bash src/bronze/comext_download.sh 2002-11 2002-11 && bash src/bronze/comext_extract.sh || true'
+            python -m src.bronze.fetch --from 2002-12 --to 2003-01
 
       # Static analysis for bash scripts (common pitfalls, not formatting).
       - name: ShellCheck (bash scripts)
