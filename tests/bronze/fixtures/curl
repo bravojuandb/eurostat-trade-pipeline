@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+
+import sys
+from pathlib import Path
+
+output_position = sys.argv.index("-o") + 1
+output_path = Path(sys.argv[output_position])
+output_path.write_text("descarga incompleta")
+
+print("200", end="")
+sys.exit(18)
